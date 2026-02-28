@@ -11,6 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { rawToCelsius } from '../temperature.js';
+import { flag22ToMode, modeToFlag22 } from '../modes.js';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ export interface StateManager {
 
 export interface WebServerEvents {
   setTemperature: [deviceId: string, celsius: number];
-  setHoliday: [deviceId: string, on: boolean];
+  setMode: [deviceId: string, flag22: string];
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -149,7 +150,7 @@ function enrichDeviceState(
     min_set_celsius: rawToCelsius(state.min_set),
     max_set_celsius: rawToCelsius(state.max_set),
     power_watts: parseInt(state.power, 10) || 0,
-    holiday: state.flag22 === '2',
+    mode: flag22ToMode(state.flag22),
   };
 }
 
@@ -294,10 +295,10 @@ export class WebServer extends EventEmitter {
       return;
     }
 
-    // ── POST /api/devices/:id/holiday ────────────────────────
-    const holidayParams = matchRoute('/api/devices/:id/holiday', pathname);
-    if (method === 'POST' && holidayParams) {
-      const deviceId = holidayParams.id!;
+    // ── POST /api/devices/:id/mode ─────────────────────────
+    const modeParams = matchRoute('/api/devices/:id/mode', pathname);
+    if (method === 'POST' && modeParams) {
+      const deviceId = modeParams.id!;
 
       const device = this.stateManager.getDevice(deviceId);
       if (!device) {
@@ -313,7 +314,7 @@ export class WebServer extends EventEmitter {
         return;
       }
 
-      let parsed: { on?: unknown };
+      let parsed: { mode?: unknown; flag22?: unknown };
       try {
         parsed = JSON.parse(body);
       } catch {
@@ -321,14 +322,25 @@ export class WebServer extends EventEmitter {
         return;
       }
 
-      if (typeof parsed.on !== 'boolean') {
-        sendJson(res, 400, { error: 'Field "on" must be a boolean' });
+      // Accept { "mode": "comfort" } or { "flag22": "3" }
+      let flag22: string | undefined;
+      if (typeof parsed.mode === 'string') {
+        flag22 = modeToFlag22(parsed.mode);
+        if (flag22 === undefined) {
+          sendJson(res, 400, { error: `Unknown mode "${parsed.mode}"` });
+          return;
+        }
+      } else if (typeof parsed.flag22 === 'string') {
+        flag22 = parsed.flag22;
+      } else {
+        sendJson(res, 400, { error: 'Provide "mode" (string) or "flag22" (string)' });
         return;
       }
 
-      console.log(`[web] command: set holiday ${deviceId} -> ${parsed.on}`);
-      this.emit('setHoliday', deviceId, parsed.on);
-      sendJson(res, 200, { ok: true, deviceId, holiday: parsed.on });
+      const modeName = flag22ToMode(flag22);
+      console.log(`[web] command: set mode ${deviceId} -> ${modeName} (flag22=${flag22})`);
+      this.emit('setMode', deviceId, flag22);
+      sendJson(res, 200, { ok: true, deviceId, mode: modeName, flag22 });
       return;
     }
 

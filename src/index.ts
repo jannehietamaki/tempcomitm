@@ -5,6 +5,7 @@ import { MqttBridge } from './mqtt.js';
 import { WebServer } from './web/server.js';
 import { TransactionLogger } from './logger.js';
 import { rawToCelsius, celsiusToRaw } from './temperature.js';
+import { flag22ToMode } from './modes.js';
 import { config } from './config.js';
 
 async function main() {
@@ -80,7 +81,7 @@ async function main() {
     sendDeviceEditUpstream(target.deviceId, target.command);
 
     const json = JSON.stringify(injected);
-    console.log(`[inject] ${target.deviceId}: comfort=${target.command['7']} (${rawToCelsius(target.command['7'] ?? '')}°C) confirms=${confirmCounts.get(target.deviceId) ?? 0}/${CONFIRM_THRESHOLD}`);
+    console.log(`[inject] ${target.deviceId}: comfort=${target.command['7']} (${rawToCelsius(target.command['7'] ?? '')}°C) flag22=${target.command['22']} (${flag22ToMode(target.command['22'] ?? '')}) confirms=${confirmCounts.get(target.deviceId) ?? 0}/${CONFIRM_THRESHOLD}`);
     return json;
   });
 
@@ -97,19 +98,23 @@ async function main() {
     if (pending) {
       const cmd = state.getPendingCommand(deviceId);
       const wantCelsius = rawToCelsius(cmd?.['7'] ?? '');
-      if (incomingCelsius === wantCelsius) {
+      const wantFlag22 = cmd?.['22'];
+      const incomingFlag22 = payload['22'];
+      const comfortMatch = incomingCelsius === wantCelsius;
+      const flag22Match = wantFlag22 === undefined || incomingFlag22 === wantFlag22;
+      if (comfortMatch && flag22Match) {
         const count = (confirmCounts.get(deviceId) ?? 0) + 1;
         confirmCounts.set(deviceId, count);
-        console.log(`[proxy] ${deviceId} confirm ${count}/${CONFIRM_THRESHOLD} (${incomingCelsius}°C)`);
+        console.log(`[proxy] ${deviceId} confirm ${count}/${CONFIRM_THRESHOLD} (${incomingCelsius}°C flag22=${incomingFlag22})`);
         if (count >= CONFIRM_THRESHOLD) {
-          console.log(`[proxy] ${deviceId} fully confirmed at ${incomingCelsius}°C`);
+          console.log(`[proxy] ${deviceId} fully confirmed at ${incomingCelsius}°C flag22=${incomingFlag22}`);
           state.clearPending(deviceId);
           confirmCounts.delete(deviceId);
           needsInject.delete(deviceId);
         }
       } else {
         // Reverted — re-inject and restart counter
-        console.log(`[proxy] ${deviceId} reverted (want=${wantCelsius}°C, got=${incomingCelsius}°C) — will re-inject`);
+        console.log(`[proxy] ${deviceId} reverted (want=${wantCelsius}°C/flag22=${wantFlag22}, got=${incomingCelsius}°C/flag22=${incomingFlag22}) — will re-inject`);
         confirmCounts.set(deviceId, 0);
         needsInject.add(deviceId);
         return; // don't update state with wrong value
@@ -183,9 +188,9 @@ async function main() {
     }
   }
 
-  // Helper: queue a pending holiday command
-  function queueHoliday(source: string, deviceId: string, on: boolean) {
-    console.log(`${source}: Set ${deviceId} holiday ${on ? 'ON' : 'OFF'}`);
+  // Helper: queue a pending mode command (sets flag22)
+  function queueMode(source: string, deviceId: string, flag22: string) {
+    console.log(`${source}: Set ${deviceId} mode flag22=${flag22} (${flag22ToMode(flag22)})`);
     const device = state.getDevice(deviceId);
     if (!device) return;
     const overrides: Record<string, string> = {
@@ -193,14 +198,14 @@ async function main() {
       '7': device.comfort,
       '11': device.manual,
       '14': '0',
-      '22': on ? '2' : '0',
+      '22': flag22,
       '15': '0',
     };
     state.setPendingCommand(deviceId, overrides);
     needsInject.add(deviceId);
     confirmCounts.set(deviceId, 0);
     sendDeviceEditUpstream(deviceId, overrides);
-    device.flag22 = on ? '2' : '0';
+    device.flag22 = flag22;
     device.last_update = new Date().toISOString();
     mqtt.publishDeviceState(deviceId, device);
   }
@@ -210,8 +215,8 @@ async function main() {
     queueTemperature('MQTT', deviceId, celsius);
   });
 
-  mqtt.on('setHoliday', (deviceId: string, on: boolean) => {
-    queueHoliday('MQTT', deviceId, on);
+  mqtt.on('setMode', (deviceId: string, flag22: string) => {
+    queueMode('MQTT', deviceId, flag22);
   });
 
   // Initialize web server
@@ -222,8 +227,8 @@ async function main() {
     queueTemperature('Web', deviceId, celsius);
   });
 
-  web.on('setHoliday', (deviceId: string, on: boolean) => {
-    queueHoliday('Web', deviceId, on);
+  web.on('setMode', (deviceId: string, flag22: string) => {
+    queueMode('Web', deviceId, flag22);
   });
 
   // Start all services

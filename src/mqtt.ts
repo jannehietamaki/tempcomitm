@@ -8,6 +8,7 @@
 import { EventEmitter } from 'node:events';
 import mqtt, { type MqttClient } from 'mqtt';
 import { rawToCelsius, celsiusToRaw } from './temperature.js';
+import { flag22ToMode, modeToFlag22 } from './modes.js';
 
 export interface MqttBridgeConfig {
   url: string;
@@ -37,7 +38,7 @@ export interface DeviceState {
 
 export interface MqttBridgeEvents {
   setTemperature: [deviceId: string, celsius: number];
-  setHoliday: [deviceId: string, on: boolean];
+  setMode: [deviceId: string, flag22: string];
   connected: [];
   disconnected: [];
   error: [error: Error];
@@ -84,7 +85,7 @@ export class MqttBridge extends EventEmitter {
         // Subscribe to command topics using wildcards
         const commandTopics = [
           `${prefix}/zones/+/target/set`,
-          `${prefix}/zones/+/holiday/set`,
+          `${prefix}/zones/+/mode/set`,
         ];
 
         this.client!.subscribe(commandTopics, { qos: 1 }, (err) => {
@@ -172,7 +173,7 @@ export class MqttBridge extends EventEmitter {
     const maxSetCelsius = rawToCelsius(state.max_set);
 
     const power = parseInt(state.power, 10) || 0;
-    const isHoliday = state.flag22 === '2';
+    const modeName = flag22ToMode(state.flag22);
 
     // Full state JSON with celsius conversions
     const statePayload = JSON.stringify({
@@ -186,7 +187,7 @@ export class MqttBridge extends EventEmitter {
       min_set_celsius: minSetCelsius,
       max_set_celsius: maxSetCelsius,
       power_watts: power,
-      holiday: isHoliday,
+      mode: modeName,
     });
 
     // Publish full state
@@ -211,7 +212,7 @@ export class MqttBridge extends EventEmitter {
       retain: true,
     });
 
-    this.client.publish(`${base}/holiday`, isHoliday ? 'on' : 'off', {
+    this.client.publish(`${base}/mode`, modeName, {
       qos: 0,
       retain: true,
     });
@@ -239,16 +240,17 @@ export class MqttBridge extends EventEmitter {
       return;
     }
 
-    // Match: {prefix}/zones/{deviceId}/holiday/set
-    const holidayMatch = topic.match(
-      new RegExp(`^${escapeRegex(prefix)}/zones/([^/]+)/holiday/set$`),
+    // Match: {prefix}/zones/{deviceId}/mode/set
+    const modeMatch = topic.match(
+      new RegExp(`^${escapeRegex(prefix)}/zones/([^/]+)/mode/set$`),
     );
-    if (holidayMatch) {
-      const deviceId = holidayMatch[1]!;
-      const value = payload.trim().toLowerCase();
-      const on = value === 'on' || value === '1' || value === 'true';
-      console.log(`[mqtt] command: set holiday ${deviceId} -> ${on}`);
-      this.emit('setHoliday', deviceId, on);
+    if (modeMatch) {
+      const deviceId = modeMatch[1]!;
+      const value = payload.trim();
+      // Accept mode names ("comfort", "antifreeze") or raw flag22 values ("3")
+      const flag22 = modeToFlag22(value) ?? value;
+      console.log(`[mqtt] command: set mode ${deviceId} -> ${value} (flag22=${flag22})`);
+      this.emit('setMode', deviceId, flag22);
       return;
     }
   }

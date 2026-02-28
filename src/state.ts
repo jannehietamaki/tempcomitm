@@ -315,15 +315,16 @@ export class StateManager extends EventEmitter {
   }
 
   /**
-   * Build a payload to set or clear holiday mode for a device.
+   * Build a payload to set the device mode (flag22).
    *
-   * @param on `true` to enable holiday mode, `false` to disable.
+   * Keeps temperatures unchanged — only sets flag22 to the requested value.
+   *
    * @returns The payload record ready to send, or `null` if the device
    *          has no stored payload template.
    */
-  buildHolidayPayload(
+  buildModePayload(
     deviceId: string,
-    on: boolean,
+    flag22: string,
   ): Record<string, string> | null {
     const device = this.devices[deviceId];
     if (!device?.payload_template) {
@@ -331,7 +332,7 @@ export class StateManager extends EventEmitter {
     }
 
     const result = { ...device.payload_template };
-    result['22'] = on ? '2' : '0';
+    result['22'] = flag22;
     return result;
   }
 

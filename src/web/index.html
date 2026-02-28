@@ -185,17 +185,6 @@
     margin-top: 2px;
   }
 
-  .holiday-badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: rgba(168, 85, 247, 0.15);
-    color: var(--accent-purple);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
   /* ── Temperature Display ────────────────────────────────── */
   .temp-display {
     text-align: center;
@@ -361,14 +350,20 @@
     50% { opacity: 0.3; }
   }
 
-  /* ── Holiday Toggle ─────────────────────────────────────── */
+  /* ── Card Footer & Mode Controls ──────────────────────────── */
   .card-footer {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 10px;
     margin-top: 16px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
+  }
+
+  .card-footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .last-update {
@@ -377,46 +372,85 @@
     font-family: var(--font-mono);
   }
 
-  .holiday-toggle {
+  .mode-btn-group {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--text-secondary);
-    user-select: none;
+    gap: 4px;
   }
 
-  .holiday-toggle:hover {
+  .mode-btn {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .mode-btn:hover {
+    border-color: var(--text-muted);
     color: var(--text-primary);
   }
 
-  .toggle-track {
-    width: 36px;
-    height: 20px;
-    border-radius: 10px;
-    background: var(--border);
-    position: relative;
-    transition: background var(--transition);
+  .mode-btn.active-comfort {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: var(--accent-green);
+    color: var(--accent-green);
   }
 
-  .toggle-track.active {
-    background: var(--accent-purple);
+  .mode-btn.active-antifreeze {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
   }
 
-  .toggle-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #fff;
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    transition: transform var(--transition);
+  .mode-btn.active-off {
+    background: rgba(100, 100, 120, 0.2);
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
   }
 
-  .toggle-track.active .toggle-thumb {
-    transform: translateX(16px);
+  /* ── Raw flag22 debug input ──────────────────────────────── */
+  .flag22-debug {
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .flag22-debug.visible {
+    display: flex;
+  }
+
+  .flag22-input {
+    width: 48px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .flag22-send {
+    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .flag22-send:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
   }
 
   /* ── Toast Notifications ────────────────────────────────── */
@@ -474,13 +508,16 @@
     border-radius: 5px;
     text-transform: uppercase;
     letter-spacing: 0.3px;
+    cursor: pointer;
+    user-select: none;
   }
 
   .mode-comfort { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); }
   .mode-eco { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
-  .mode-holiday { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
-  .mode-frost { background: rgba(147, 197, 253, 0.15); color: #93c5fd; }
+  .mode-antifreeze { background: rgba(147, 197, 253, 0.15); color: #93c5fd; }
+  .mode-off { background: rgba(100, 100, 120, 0.15); color: var(--text-muted); }
   .mode-boost { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+  .mode-program { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
 
   /* ── Responsive ─────────────────────────────────────────── */
   @media (max-width: 640px) {
@@ -573,9 +610,20 @@
     }
   }
 
+  // Mode flag22 mapping — must match src/modes.ts
+  var MODE_MAP = {
+    '0':  'comfort',
+    '1':  'off',
+    '2':  'antifreeze',
+    '3':  'eco',
+    '4':  'boost',
+    '11': 'program',
+  };
+
   function getModeName(dev) {
-    if (dev.flag22 === '2') return 'holiday';
-    return 'comfort';
+    // Prefer server-provided mode name if available
+    if (dev.mode) return dev.mode;
+    return MODE_MAP[dev.flag22] || ('unknown(' + dev.flag22 + ')');
   }
 
   // ── Toasts ─────────────────────────────────────────────────
@@ -663,28 +711,36 @@
     });
   }
 
-  function setHoliday(deviceId, on) {
-    var key = deviceId + ':holiday';
+  function setMode(deviceId, mode, flag22) {
+    var key = deviceId + ':mode';
     if (pendingCommands.has(key)) return;
     pendingCommands.add(key);
 
-    fetch('/api/devices/' + encodeURIComponent(deviceId) + '/holiday', {
+    // If called with a mode name, send { mode }, else send { flag22 }
+    var body = mode ? { mode: mode } : { flag22: flag22 };
+
+    fetch('/api/devices/' + encodeURIComponent(deviceId) + '/mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ on: on }),
+      body: JSON.stringify(body),
     })
     .then(function(res) {
       pendingCommands.delete(key);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      showToast('Holiday mode ' + (on ? 'enabled' : 'disabled'), 'success');
+      if (!res.ok) return res.json().then(function(d) { throw new Error(d.error || 'HTTP ' + res.status); });
+      return res.json();
+    })
+    .then(function(data) {
+      if (!data) return;
+      showToast('Mode set to ' + data.mode, 'success');
       if (devices[deviceId]) {
-        devices[deviceId].flag22 = on ? '2' : '0';
+        devices[deviceId].flag22 = data.flag22;
+        devices[deviceId].mode = data.mode;
         renderGrid();
       }
     })
     .catch(function(err) {
       pendingCommands.delete(key);
-      showToast('Failed to set holiday: ' + err.message, 'error');
+      showToast('Failed to set mode: ' + err.message, 'error');
     });
   }
 
@@ -729,7 +785,6 @@
       var targetTemp = rawToCelsius(dev.comfort);
       var power = parseInt(dev.power, 10) || 0;
       var mode = getModeName(dev);
-      var isHoliday = dev.flag22 === '2';
       var statusClass = getStatusClass(dev);
       var powerClass = getPowerClass(power);
       var zoneName = dev.zone_label || dev.label || 'Zone ' + id;
@@ -742,7 +797,7 @@
       html += '<div class="zone-name">' + escapeHtml(zoneName) + '</div>';
       html += '<div class="zone-id">#' + escapeHtml(id) + '</div>';
       html += '</div>';
-      html += '<span class="mode-badge mode-' + mode + '">' + mode + '</span>';
+      html += '<span class="mode-badge mode-' + mode + '" onclick="window.__tempco.toggleFlag22Debug(\'' + id + '\')" title="Click to show raw flag22 input">' + mode + '</span>';
       html += '</div>';
 
       // Temperature display
@@ -776,14 +831,21 @@
       html += '</div>';
       html += '</div>';
 
-      // Footer
+      // Footer — mode controls
       html += '<div class="card-footer">';
+      html += '<div class="card-footer-row">';
       html += '<div class="last-update">' + formatTime(dev.last_update) + '</div>';
-      html += '<div class="holiday-toggle" onclick="window.__tempco.toggleHoliday(\'' + id + '\', ' + (!isHoliday) + ')">';
-      html += '<span>Holiday</span>';
-      html += '<div class="toggle-track' + (isHoliday ? ' active' : '') + '">';
-      html += '<div class="toggle-thumb"></div>';
+      html += '<div class="mode-btn-group">';
+      html += '<button class="mode-btn' + (mode === 'comfort' ? ' active-comfort' : '') + '" onclick="window.__tempco.setMode(\'' + id + '\', \'comfort\')">Comfort</button>';
+      html += '<button class="mode-btn' + (mode === 'antifreeze' ? ' active-antifreeze' : '') + '" onclick="window.__tempco.setMode(\'' + id + '\', \'antifreeze\')">Anti Freeze</button>';
+      html += '<button class="mode-btn' + (mode === 'off' ? ' active-off' : '') + '" onclick="window.__tempco.setMode(\'' + id + '\', \'off\')">Off</button>';
       html += '</div>';
+      html += '</div>';
+      // Raw flag22 debug input (toggled by clicking mode badge)
+      html += '<div class="flag22-debug" id="flag22-debug-' + id + '">';
+      html += '<span style="font-size:11px;color:var(--text-muted)">flag22:</span>';
+      html += '<input class="flag22-input" id="flag22-input-' + id + '" type="text" value="' + escapeHtml(dev.flag22) + '" placeholder="0">';
+      html += '<button class="flag22-send" onclick="window.__tempco.sendRawFlag22(\'' + id + '\')">Send</button>';
       html += '</div>';
       html += '</div>';
 
@@ -816,8 +878,20 @@
       if (next > 35) next = 35;
       setTemperature(deviceId, next);
     },
-    toggleHoliday: function(deviceId, on) {
-      setHoliday(deviceId, on);
+    setMode: function(deviceId, modeName) {
+      setMode(deviceId, modeName, null);
+    },
+    sendRawFlag22: function(deviceId) {
+      var input = document.getElementById('flag22-input-' + deviceId);
+      if (!input) return;
+      var val = input.value.trim();
+      if (val === '') return;
+      setMode(deviceId, null, val);
+    },
+    toggleFlag22Debug: function(deviceId) {
+      var el = document.getElementById('flag22-debug-' + deviceId);
+      if (!el) return;
+      el.classList.toggle('visible');
     }
   };
 
