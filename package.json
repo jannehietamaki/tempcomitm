@@ -1,0 +1,21 @@
+{
+  "name": "tempcomitm",
+  "version": "1.0.0",
+  "description": "Tempco/Purmo heating system MITM proxy with web UI and MQTT integration",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch & node --watch dist/index.js"
+  },
+  "keywords": ["tempco", "purmo", "heating", "mitm", "proxy", "mqtt", "smart-home"],
+  "license": "MIT",
+  "dependencies": {
+    "mqtt": "^5.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

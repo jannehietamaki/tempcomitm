@@ -1,0 +1,7 @@
+node_modules/
+dist/
+logs/
+state/devices.json
+state/zone_aliases.json
+.env
+*.tgz
