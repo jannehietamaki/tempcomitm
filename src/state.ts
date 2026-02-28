@@ -36,6 +36,7 @@ export interface DeviceState {
   time_boost: string;
   flag22: string;
   power: string;
+  heating_up: string;
   temperature_air: string;
   schedule: string;
   payload_template?: Record<string, string>;
@@ -70,6 +71,7 @@ const FIELD_MAP: Record<string, keyof DeviceState> = {
   '16': 'temperature_air',
   '22': 'flag22',
   '23': 'power',
+  '33': 'heating_up',
 };
 
 // ---------------------------------------------------------------------------
@@ -357,6 +359,7 @@ export class StateManager extends EventEmitter {
       time_boost: '',
       flag22: '',
       power: '',
+      heating_up: '',
       temperature_air: '',
       schedule: '',
       last_update: '',

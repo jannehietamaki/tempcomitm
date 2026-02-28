@@ -31,6 +31,7 @@ export interface DeviceState {
   time_boost: string;
   flag22: string;
   power: string;
+  heating_up: string;
   temperature_air: string;
   schedule: string;
   last_update: string;
@@ -153,6 +154,7 @@ function enrichDeviceState(
     min_set_celsius: rawToCelsius(state.min_set),
     max_set_celsius: rawToCelsius(state.max_set),
     power_watts: parseInt(state.power, 10) || 0,
+    heating: state.heating_up === '1',
     mode,
     target_celsius: rawToCelsius(targetRaw),
     target_field: targetField,

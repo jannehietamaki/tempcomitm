@@ -278,44 +278,47 @@
     font-family: var(--font-sans);
   }
 
-  /* ── Stats Row ──────────────────────────────────────────── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin: 16px 0;
-  }
-
-  .stat {
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: 8px;
-    padding: 10px 12px;
-  }
-
-  .stat-label {
-    font-size: 11px;
-    color: var(--text-muted);
+  /* ── Heating Indicator ────────────────────────────────────── */
+  .heating-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    margin: 12px 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.15);
   }
 
-  .stat-value {
-    font-family: var(--font-mono);
-    font-size: 16px;
-    font-weight: 600;
-    margin-top: 2px;
-  }
-
-  .stat-value.power-high {
-    color: var(--accent-red);
-  }
-
-  .stat-value.power-med {
+  .heating-indicator.heating-on {
     color: var(--accent-orange);
   }
 
-  .stat-value.power-low {
-    color: var(--accent-green);
+  .heating-indicator.heating-off {
+    color: var(--text-muted);
+  }
+
+  .heating-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .heating-on .heating-dot {
+    background: var(--accent-orange);
+    animation: pulse-heating 1.5s ease-in-out infinite;
+  }
+
+  .heating-off .heating-dot {
+    background: var(--text-muted);
+  }
+
+  @keyframes pulse-heating {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   /* ── Pending Indicator ────────────────────────────────────── */
@@ -659,19 +662,13 @@
   function getStatusClass(device) {
     var current = rawToCelsius(device.temperature_air);
     var target = getDeviceTarget(device);
-    var power = parseInt(device.power, 10) || 0;
+    var heating = device.heating_up === '1' || device.heating === true;
 
     if (!isFinite(current) || !isFinite(target)) return 'status-ok';
-    if (power > 500) return 'status-heating';
+    if (heating) return 'status-heating';
     if (current < target - 1) return 'status-cold';
     if (current >= target - 1 && current <= target + 0.5) return 'status-ok';
     return 'status-ok';
-  }
-
-  function getPowerClass(power) {
-    if (power > 500) return 'power-high';
-    if (power > 100) return 'power-med';
-    return 'power-low';
   }
 
   // ── API Calls ──────────────────────────────────────────────
@@ -801,9 +798,8 @@
       var currentTemp = rawToCelsius(dev.temperature_air);
       var mode = getModeName(dev);
       var targetTemp = getDeviceTarget(dev);
-      var power = parseInt(dev.power, 10) || 0;
+      var heating = dev.heating_up === '1' || dev.heating === true;
       var statusClass = getStatusClass(dev);
-      var powerClass = getPowerClass(power);
       var zoneName = dev.zone_label || dev.label || 'Zone ' + id;
 
       html += '<div class="zone-card ' + statusClass + '" data-id="' + id + '">';
@@ -845,12 +841,12 @@
         html += '<div class="pending-indicator"><div class="pending-dot"></div>Waiting for controller</div>';
       }
 
-      // Stats
-      html += '<div class="stats-row">';
-      html += '<div class="stat">';
-      html += '<div class="stat-label">Power</div>';
-      html += '<div class="stat-value ' + powerClass + '">' + power + ' W</div>';
-      html += '</div>';
+      // Heating status
+      var heatingClass = heating ? 'heating-on' : 'heating-off';
+      var heatingText = heating ? 'Heating' : 'Idle';
+      html += '<div class="heating-indicator ' + heatingClass + '">';
+      html += '<div class="heating-dot"></div>';
+      html += heatingText;
       html += '</div>';
 
       // Footer — mode controls

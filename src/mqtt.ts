@@ -31,6 +31,7 @@ export interface DeviceState {
   time_boost: string;
   flag22: string;
   power: string;
+  heating_up: string;
   temperature_air: string;
   schedule: string;
   last_update: string;
@@ -192,6 +193,7 @@ export class MqttBridge extends EventEmitter {
       min_set_celsius: minSetCelsius,
       max_set_celsius: maxSetCelsius,
       power_watts: power,
+      heating: state.heating_up === '1',
       mode: modeName,
       target_celsius: targetCelsius,
       target_field: targetField,
@@ -215,6 +217,11 @@ export class MqttBridge extends EventEmitter {
     });
 
     this.client.publish(`${base}/power`, String(power), {
+      qos: 0,
+      retain: true,
+    });
+
+    this.client.publish(`${base}/heating`, state.heating_up === '1' ? '1' : '0', {
       qos: 0,
       retain: true,
     });
