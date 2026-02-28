@@ -591,7 +591,7 @@
   function rawToCelsius(raw) {
     var n = parseFloat(raw);
     if (!isFinite(n)) return NaN;
-    return Math.round(((n - 320) / 18) * 2) / 2;
+    return Math.round(((n - 320) / 18) * 10) / 10;
   }
 
   function formatTemp(celsius) {
@@ -642,10 +642,23 @@
     }, 3000);
   }
 
+  // ── Target field helpers ──────────────────────────────────
+  // Maps mode name to the DeviceState field holding its target temperature
+  var TARGET_FIELD = {
+    comfort: 'comfort', antifreeze: 'frost', eco: 'eco', boost: 'boost',
+    off: 'comfort', program: 'comfort',
+  };
+
+  function getDeviceTarget(dev) {
+    var mode = getModeName(dev);
+    var field = TARGET_FIELD[mode] || 'comfort';
+    return rawToCelsius(dev[field]);
+  }
+
   // ── Card Status Class ──────────────────────────────────────
   function getStatusClass(device) {
     var current = rawToCelsius(device.temperature_air);
-    var target = rawToCelsius(device.comfort);
+    var target = getDeviceTarget(device);
     var power = parseInt(device.power, 10) || 0;
 
     if (!isFinite(current) || !isFinite(target)) return 'status-ok';
@@ -699,9 +712,13 @@
       pendingCommands.delete(key);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       showToast('Target set to ' + celsius.toFixed(1) + '\u00B0C', 'success');
-      // Optimistic update for snappy UI
+      // Optimistic update — update the right field for the active mode
       if (devices[deviceId]) {
-        devices[deviceId].comfort = String(Math.round(celsius * 18 + 320));
+        var rawVal = String(Math.round(celsius * 18 + 320));
+        var mode = getModeName(devices[deviceId]);
+        var field = TARGET_FIELD[mode] || 'comfort';
+        devices[deviceId][field] = rawVal;
+        if (field === 'comfort') devices[deviceId].manual = rawVal;
         renderGrid();
       }
     })
@@ -782,9 +799,9 @@
       var id = ids[i];
       var dev = devices[id];
       var currentTemp = rawToCelsius(dev.temperature_air);
-      var targetTemp = rawToCelsius(dev.comfort);
-      var power = parseInt(dev.power, 10) || 0;
       var mode = getModeName(dev);
+      var targetTemp = getDeviceTarget(dev);
+      var power = parseInt(dev.power, 10) || 0;
       var statusClass = getStatusClass(dev);
       var powerClass = getPowerClass(power);
       var zoneName = dev.zone_label || dev.label || 'Zone ' + id;
@@ -808,11 +825,16 @@
       html += '<div class="temp-label">Air Temperature</div>';
       html += '</div>';
 
-      // Target control
+      // Target control — label reflects which mode's temperature is shown
+      var targetLabel = 'Target';
+      if (mode === 'antifreeze') targetLabel = 'Frost';
+      else if (mode === 'eco') targetLabel = 'Eco';
+      else if (mode === 'boost') targetLabel = 'Boost';
+
       html += '<div class="target-control">';
       html += '<button class="target-btn" onclick="window.__tempco.adjustTarget(\'' + id + '\', -0.5)" title="Decrease by 0.5\u00B0C">&minus;</button>';
       html += '<div class="target-value">';
-      html += '<span class="label">Target</span>';
+      html += '<span class="label">' + targetLabel + '</span>';
       html += formatTemp(targetTemp) + '\u00B0C';
       html += '</div>';
       html += '<button class="target-btn" onclick="window.__tempco.adjustTarget(\'' + id + '\', 0.5)" title="Increase by 0.5\u00B0C">+</button>';
@@ -866,7 +888,7 @@
     adjustTarget: function(deviceId, delta) {
       var dev = devices[deviceId];
       if (!dev) return;
-      var current = rawToCelsius(dev.comfort);
+      var current = getDeviceTarget(dev);
       if (!isFinite(current)) return;
       var next = Math.round((current + delta) * 10) / 10;
       // Clamp to reasonable range

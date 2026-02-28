@@ -17,7 +17,7 @@ export function rawToCelsius(raw: number | string): number {
     return NaN;
   }
   const celsius = (numRaw - 320) / 18;
-  return Math.round(celsius * 2) / 2;
+  return Math.round(celsius * 10) / 10;
 }
 
 /**

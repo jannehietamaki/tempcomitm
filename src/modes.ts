@@ -35,3 +35,30 @@ export function flag22ToMode(flag22: string): string {
 export function modeToFlag22(modeName: string): string | undefined {
   return MODES[modeName.toLowerCase()]?.flag22;
 }
+
+/**
+ * Get the payload key for the target temperature used by a given mode.
+ * Each mode uses a different temperature register:
+ *   comfort/program → key 7 (comfort), antifreeze → key 8 (frost),
+ *   eco → key 9, boost → key 10.
+ */
+export function getTargetKey(flag22: string): string {
+  switch (flag22) {
+    case '2': return '8';   // antifreeze → frost
+    case '3': return '9';   // eco
+    case '4': return '10';  // boost
+    default:  return '7';   // comfort, off, program
+  }
+}
+
+/**
+ * Get the DeviceState field name for the target temperature used by a given mode.
+ */
+export function getTargetField(flag22: string): string {
+  switch (flag22) {
+    case '2': return 'frost';
+    case '3': return 'eco';
+    case '4': return 'boost';
+    default:  return 'comfort';
+  }
+}

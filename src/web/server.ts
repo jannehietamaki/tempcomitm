@@ -11,7 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 import { rawToCelsius } from '../temperature.js';
-import { flag22ToMode, modeToFlag22 } from '../modes.js';
+import { flag22ToMode, modeToFlag22, getTargetField } from '../modes.js';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -137,6 +137,9 @@ function enrichDeviceState(
   state: DeviceState,
   pending: boolean,
 ): Record<string, unknown> {
+  const mode = flag22ToMode(state.flag22);
+  const targetField = getTargetField(state.flag22);
+  const targetRaw = (state as unknown as Record<string, string>)[targetField] ?? '';
   return {
     id,
     ...state,
@@ -150,7 +153,9 @@ function enrichDeviceState(
     min_set_celsius: rawToCelsius(state.min_set),
     max_set_celsius: rawToCelsius(state.max_set),
     power_watts: parseInt(state.power, 10) || 0,
-    mode: flag22ToMode(state.flag22),
+    mode,
+    target_celsius: rawToCelsius(targetRaw),
+    target_field: targetField,
   };
 }
 

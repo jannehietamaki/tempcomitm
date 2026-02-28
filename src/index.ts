@@ -5,7 +5,7 @@ import { MqttBridge } from './mqtt.js';
 import { WebServer } from './web/server.js';
 import { TransactionLogger } from './logger.js';
 import { rawToCelsius, celsiusToRaw } from './temperature.js';
-import { flag22ToMode } from './modes.js';
+import { flag22ToMode, getTargetKey } from './modes.js';
 import { config } from './config.js';
 
 async function main() {
@@ -81,7 +81,9 @@ async function main() {
     sendDeviceEditUpstream(target.deviceId, target.command);
 
     const json = JSON.stringify(injected);
-    console.log(`[inject] ${target.deviceId}: comfort=${target.command['7']} (${rawToCelsius(target.command['7'] ?? '')}°C) flag22=${target.command['22']} (${flag22ToMode(target.command['22'] ?? '')}) confirms=${confirmCounts.get(target.deviceId) ?? 0}/${CONFIRM_THRESHOLD}`);
+    const cmdFlag22 = target.command['22'] ?? '0';
+    const cmdTargetKey = getTargetKey(cmdFlag22);
+    console.log(`[inject] ${target.deviceId}: key${cmdTargetKey}=${target.command[cmdTargetKey]} (${rawToCelsius(target.command[cmdTargetKey] ?? '')}°C) flag22=${cmdFlag22} (${flag22ToMode(cmdFlag22)}) confirms=${confirmCounts.get(target.deviceId) ?? 0}/${CONFIRM_THRESHOLD}`);
     return json;
   });
 
@@ -90,31 +92,34 @@ async function main() {
     const deviceId = payload['2'];
     if (!deviceId) return;
 
-    const comfort = payload['7'];
     const prev = state.getDevice(deviceId);
     const pending = state.isPending(deviceId);
-    const incomingCelsius = rawToCelsius(comfort ?? '');
 
     if (pending) {
       const cmd = state.getPendingCommand(deviceId);
-      const wantCelsius = rawToCelsius(cmd?.['7'] ?? '');
       const wantFlag22 = cmd?.['22'];
       const incomingFlag22 = payload['22'];
-      const comfortMatch = incomingCelsius === wantCelsius;
       const flag22Match = wantFlag22 === undefined || incomingFlag22 === wantFlag22;
-      if (comfortMatch && flag22Match) {
+
+      // Check the target temperature field for the active mode
+      const targetKey = getTargetKey(wantFlag22 ?? '0');
+      const wantCelsius = rawToCelsius(cmd?.[targetKey] ?? '');
+      const incomingCelsius = rawToCelsius(payload[targetKey] ?? '');
+      const tempMatch = wantCelsius === incomingCelsius;
+
+      if (tempMatch && flag22Match) {
         const count = (confirmCounts.get(deviceId) ?? 0) + 1;
         confirmCounts.set(deviceId, count);
-        console.log(`[proxy] ${deviceId} confirm ${count}/${CONFIRM_THRESHOLD} (${incomingCelsius}°C flag22=${incomingFlag22})`);
+        console.log(`[proxy] ${deviceId} confirm ${count}/${CONFIRM_THRESHOLD} (key${targetKey}=${incomingCelsius}°C flag22=${incomingFlag22})`);
         if (count >= CONFIRM_THRESHOLD) {
-          console.log(`[proxy] ${deviceId} fully confirmed at ${incomingCelsius}°C flag22=${incomingFlag22}`);
+          console.log(`[proxy] ${deviceId} fully confirmed at key${targetKey}=${incomingCelsius}°C flag22=${incomingFlag22}`);
           state.clearPending(deviceId);
           confirmCounts.delete(deviceId);
           needsInject.delete(deviceId);
         }
       } else {
         // Reverted — re-inject and restart counter
-        console.log(`[proxy] ${deviceId} reverted (want=${wantCelsius}°C/flag22=${wantFlag22}, got=${incomingCelsius}°C/flag22=${incomingFlag22}) — will re-inject`);
+        console.log(`[proxy] ${deviceId} reverted (want key${targetKey}=${wantCelsius}°C/flag22=${wantFlag22}, got=${incomingCelsius}°C/flag22=${incomingFlag22}) — will re-inject`);
         confirmCounts.set(deviceId, 0);
         needsInject.add(deviceId);
         return; // don't update state with wrong value
@@ -162,30 +167,42 @@ async function main() {
     });
   }
 
-  // Helper: queue a pending temperature command
+  // Helper: queue a pending temperature command (mode-aware)
   function queueTemperature(source: string, deviceId: string, celsius: number) {
-    console.log(`${source}: Set ${deviceId} temperature to ${celsius}°C`);
+    const device = state.getDevice(deviceId);
+    if (!device) return;
+
+    const mode = flag22ToMode(device.flag22);
+    const targetKey = getTargetKey(device.flag22);
+    console.log(`${source}: Set ${deviceId} temperature to ${celsius}°C (mode=${mode}, key=${targetKey})`);
+
     const raw = String(celsiusToRaw(celsius));
     const overrides: Record<string, string> = {
       '2': deviceId,
-      '7': raw,
-      '11': raw,
+      '7': device.comfort,
+      '11': device.manual,
       '14': '0',
-      '22': '0',
+      '22': device.flag22,
       '15': '0',
     };
+    // Set the target temperature for the active mode
+    overrides[targetKey] = raw;
+    if (targetKey === '7') overrides['11'] = raw; // keep manual in sync for comfort
+
     state.setPendingCommand(deviceId, overrides);
     needsInject.add(deviceId);
     confirmCounts.set(deviceId, 0);
     sendDeviceEditUpstream(deviceId, overrides);
-    // Optimistic local state update
-    const device = state.getDevice(deviceId);
-    if (device) {
-      device.comfort = raw;
-      device.manual = raw;
-      device.last_update = new Date().toISOString();
-      mqtt.publishDeviceState(deviceId, device);
-    }
+
+    // Optimistic local state update — update the right field
+    const FIELD_FOR_KEY: Record<string, keyof typeof device> = {
+      '7': 'comfort', '8': 'frost', '9': 'eco', '10': 'boost',
+    };
+    const field = FIELD_FOR_KEY[targetKey] ?? 'comfort';
+    (device as unknown as Record<string, string>)[field] = raw;
+    if (targetKey === '7') device.manual = raw;
+    device.last_update = new Date().toISOString();
+    mqtt.publishDeviceState(deviceId, device);
   }
 
   // Helper: queue a pending mode command (sets flag22)

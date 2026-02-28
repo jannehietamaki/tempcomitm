@@ -8,7 +8,7 @@
 import { EventEmitter } from 'node:events';
 import mqtt, { type MqttClient } from 'mqtt';
 import { rawToCelsius, celsiusToRaw } from './temperature.js';
-import { flag22ToMode, modeToFlag22 } from './modes.js';
+import { flag22ToMode, modeToFlag22, getTargetField } from './modes.js';
 
 export interface MqttBridgeConfig {
   url: string;
@@ -175,6 +175,11 @@ export class MqttBridge extends EventEmitter {
     const power = parseInt(state.power, 10) || 0;
     const modeName = flag22ToMode(state.flag22);
 
+    // Resolve the active target temperature based on mode
+    const targetField = getTargetField(state.flag22);
+    const targetRaw = (state as unknown as Record<string, string>)[targetField] ?? '';
+    const targetCelsius = rawToCelsius(targetRaw);
+
     // Full state JSON with celsius conversions
     const statePayload = JSON.stringify({
       ...state,
@@ -188,6 +193,8 @@ export class MqttBridge extends EventEmitter {
       max_set_celsius: maxSetCelsius,
       power_watts: power,
       mode: modeName,
+      target_celsius: targetCelsius,
+      target_field: targetField,
     });
 
     // Publish full state
@@ -202,7 +209,7 @@ export class MqttBridge extends EventEmitter {
       retain: true,
     });
 
-    this.client.publish(`${base}/target`, String(comfortCelsius), {
+    this.client.publish(`${base}/target`, String(targetCelsius), {
       qos: 0,
       retain: true,
     });
