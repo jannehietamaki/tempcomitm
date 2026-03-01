@@ -197,7 +197,7 @@ async function main() {
       '11': device.manual,
       '14': '0',
       '22': device.flag22,
-      '15': '0',
+      '15': device.flag22,
     };
     // Set the target temperature for the active mode
     overrides[targetKey] = raw;
@@ -228,13 +228,10 @@ async function main() {
     const overrides: Record<string, string> = {
       '2': deviceId,
       '7': device.comfort,
-      '8': device.frost,
-      '9': device.eco,
-      '10': device.boost,
       '11': device.manual,
       '14': '0',
       '22': flag22,
-      '15': '0',
+      '15': flag22,
     };
     state.setPendingCommand(deviceId, overrides);
     needsInject.add(deviceId);
