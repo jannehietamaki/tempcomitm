@@ -35,7 +35,9 @@ async function main() {
   //
   // Only one device is actively being set at a time.
   const CONFIRM_THRESHOLD = 3;
+  const MAX_REVERTS = 5;
   const confirmCounts = new Map<string, number>();
+  const revertCounts = new Map<string, number>();
   // Track which devices need an injection (new command or reverted)
   const needsInject = new Set<string>();
 
@@ -116,13 +118,25 @@ async function main() {
           state.clearPending(deviceId);
           confirmCounts.delete(deviceId);
           needsInject.delete(deviceId);
+          revertCounts.delete(deviceId);
         }
       } else {
         // Reverted — re-inject and restart counter
-        console.log(`[proxy] ${deviceId} reverted (want key${targetKey}=${wantCelsius}°C/flag22=${wantFlag22}, got=${incomingCelsius}°C/flag22=${incomingFlag22}) — will re-inject`);
-        confirmCounts.set(deviceId, 0);
-        needsInject.add(deviceId);
-        return; // don't update state with wrong value
+        const reverts = (revertCounts.get(deviceId) ?? 0) + 1;
+        revertCounts.set(deviceId, reverts);
+        if (reverts >= MAX_REVERTS) {
+          console.log(`[proxy] ${deviceId} giving up after ${reverts} reverts (want key${targetKey}=${wantCelsius}°C/flag22=${wantFlag22}, got=${incomingCelsius}°C/flag22=${incomingFlag22}) — device rejected command`);
+          state.clearPending(deviceId);
+          confirmCounts.delete(deviceId);
+          needsInject.delete(deviceId);
+          revertCounts.delete(deviceId);
+          // Fall through to update state with what the device actually reports
+        } else {
+          console.log(`[proxy] ${deviceId} reverted ${reverts}/${MAX_REVERTS} (want key${targetKey}=${wantCelsius}°C/flag22=${wantFlag22}, got=${incomingCelsius}°C/flag22=${incomingFlag22}) — will re-inject`);
+          confirmCounts.set(deviceId, 0);
+          needsInject.add(deviceId);
+          return; // don't update state with wrong value
+        }
       }
     }
 
@@ -192,6 +206,7 @@ async function main() {
     state.setPendingCommand(deviceId, overrides);
     needsInject.add(deviceId);
     confirmCounts.set(deviceId, 0);
+    revertCounts.set(deviceId, 0);
     sendDeviceEditUpstream(deviceId, overrides);
 
     // Optimistic local state update — update the right field
@@ -224,6 +239,7 @@ async function main() {
     state.setPendingCommand(deviceId, overrides);
     needsInject.add(deviceId);
     confirmCounts.set(deviceId, 0);
+    revertCounts.set(deviceId, 0);
     sendDeviceEditUpstream(deviceId, overrides);
     device.flag22 = flag22;
     device.last_update = new Date().toISOString();
