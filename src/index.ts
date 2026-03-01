@@ -225,6 +225,10 @@ async function main() {
     console.log(`${source}: Set ${deviceId} mode flag22=${flag22} (${flag22ToMode(flag22)})`);
     const device = state.getDevice(deviceId);
     if (!device) return;
+    const targetKey = getTargetKey(flag22);
+    const FIELD_FOR_KEY: Record<string, keyof typeof device> = {
+      '7': 'comfort', '8': 'frost', '9': 'eco', '10': 'boost',
+    };
     const overrides: Record<string, string> = {
       '2': deviceId,
       '7': device.comfort,
@@ -233,6 +237,9 @@ async function main() {
       '22': flag22,
       '15': flag22,
     };
+    // Include the target temp key so confirmation logic can match it
+    const field = FIELD_FOR_KEY[targetKey];
+    if (field && targetKey !== '7') overrides[targetKey] = String(device[field] ?? '');
     state.setPendingCommand(deviceId, overrides);
     needsInject.add(deviceId);
     confirmCounts.set(deviceId, 0);
