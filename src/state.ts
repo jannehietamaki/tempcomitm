@@ -15,6 +15,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { celsiusToRaw, rawToCelsius } from './temperature.js';
+import { flag22ToMode, getTargetField } from './modes.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -197,7 +198,10 @@ export class StateManager extends EventEmitter {
     this.devices[deviceId] = existing;
     this.save();
 
-    console.log(`[state] update ${deviceId} comfort=${existing.comfort} (${rawToCelsius(existing.comfort)}°C) air=${existing.temperature_air} (${rawToCelsius(existing.temperature_air)}°C)`);
+    const mode = flag22ToMode(existing.flag22);
+    const targetField = getTargetField(existing.flag22);
+    const targetRaw = (existing as unknown as Record<string, string>)[targetField] ?? '';
+    console.log(`[state] update ${deviceId} target=${rawToCelsius(targetRaw)}°C (${mode}) air=${rawToCelsius(existing.temperature_air)}°C`);
 
     this.emit('deviceUpdate', deviceId, existing);
 
