@@ -213,6 +213,9 @@ async function main() {
     const overrides: Record<string, string> = {
       '2': deviceId,
       '7': device.comfort,
+      '8': device.frost,
+      '9': device.eco,
+      '10': device.boost,
       '11': device.manual,
       '14': '0',
       '22': flag22,
